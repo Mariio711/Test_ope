@@ -1,0 +1,3 @@
+([('TestInteractivo',
+   '/Users/mario/Documents/Respos_git/Test_ope/dist/TestInteractivo',
+   'EXECUTABLE')],)

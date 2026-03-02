@@ -146,6 +146,9 @@ class TestApp:
 
         # Botón de inicio
         ttk.Button(main_frame, text="COMENZAR EXAMEN", style="Action.TButton", command=self.comenzar).pack(pady=20, ipadx=40, ipady=10)
+        
+        # Botón Historial
+        ttk.Button(main_frame, text="Ver Historial de Intentos", command=self.ver_historial).pack(pady=5)
 
     def cargar_archivos_carpeta(self):
         # Limpiar anteriores si recarga
@@ -513,14 +516,212 @@ class TestApp:
         action_frame = ttk.Frame(self.root, padding="10")
         action_frame.pack(fill="x", side="bottom")
         
-        # Izquierda: Guardar
-        left_actions = ttk.Frame(action_frame)
-        left_actions.pack(side="left")
-        ttk.Button(left_actions, text="💾 Guardar en Historial", command=lambda: self.guardar_en_db(nota, aciertos, fallos, blancos)).pack(side="left", padx=5)
+        # ttk.Button(left_actions, text="💾 Guardar en Historial", command=lambda: self.guardar_en_db(nota, aciertos, fallos, blancos)).pack(side="left", padx=5)
         ttk.Button(left_actions, text="📄 Descargar Reporte", command=lambda: self.descargar_reporte(nota, aciertos, fallos, blancos)).pack(side="left", padx=5)
+
+        # Guardado Automático
+        self.guardar_en_db_automatico(nota, aciertos, fallos, blancos)
 
         # Derecha: Volver
         ttk.Button(action_frame, text="Volver al Menú", command=self.do_restart).pack(side="right", padx=5)
+
+    def guardar_en_db_automatico(self, nota, aciertos, fallos, blancos):
+        try:
+            # Conexión DB en carpeta Documentos del usuario
+            docs_dir = os.path.join(os.path.expanduser("~"), "Documents", "TestInteractivo")
+            os.makedirs(docs_dir, exist_ok=True)
+            db_path = os.path.join(docs_dir, "historial_test.db")
+            
+            conn = sqlite3.connect(db_path)
+            c = conn.cursor()
+            
+            # Crear tabla si no existe
+            c.execute('''CREATE TABLE IF NOT EXISTS intentos
+                         (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                          fecha TEXT,
+                          titulo TEXT,
+                          nota REAL,
+                          aciertos INTEGER,
+                          fallos INTEGER,
+                          blancos INTEGER,
+                          detalles TEXT)''')
+
+            # Determinar título automático
+            # Usar nombre del primer archivo origen o "Mix"
+            origen_base = "Test Personalizado"
+            if self.preguntas_seleccionadas:
+                origen_base = self.preguntas_seleccionadas[0].get('archivo_origen', '').replace('.csv', '').replace('_', ' ').capitalize()
+            
+            # Contar intentos previos de este tema para poner número
+            c.execute("SELECT COUNT(*) FROM intentos WHERE titulo LIKE ?", (f"{origen_base}%",))
+            num_intento = c.fetchone()[0] + 1
+            
+            titulo_final = f"{origen_base} - Intento {num_intento}"
+            
+            # Preparar datos
+            fecha_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            detalles_json = json.dumps({
+                "total_preguntas": self.cantidad,
+                "respuestas_usuario": self.respuestas_usuario,
+                "preguntas_info": [{
+                    "pregunta": p.get('pregunta'),
+                    "opciones": obtener_opciones(p),
+                    "respuesta_correcta": int(p.get('respuesta', -1)),
+                    "archivo_origen": p.get('archivo_origen')
+                } for p in self.preguntas_seleccionadas]
+            })
+            
+            c.execute("INSERT INTO intentos (fecha, titulo, nota, aciertos, fallos, blancos, detalles) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                      (fecha_str, titulo_final, nota, aciertos, fallos, blancos, detalles_json))
+            
+            conn.commit()
+            conn.close()
+            # Opcional: Notificar discreto o label
+            # messagebox.showinfo("Auto-Guardado", f"Resultado guardado como: {titulo_final}")
+            
+        except Exception as e:
+            print(f"Error Auto-Guardado: {e}")
+
+    def ver_historial(self):
+        self.limpiar_ventana()
+        
+        # Header Historial
+        header_frame = ttk.Frame(self.root, padding="15")
+        header_frame.pack(fill="x")
+        ttk.Label(header_frame, text="Historial de Intentos", style="Title.TLabel").pack(side="left")
+        ttk.Button(header_frame, text="Volver al Menú", command=self.do_restart).pack(side="right")
+        
+        # Treeview Lista
+        tree_frame = ttk.Frame(self.root, padding="10")
+        tree_frame.pack(fill="both", expand=True)
+        
+        cols = ("ID", "Fecha", "Título", "Nota", "Aciertos/Fallos")
+        tree = ttk.Treeview(tree_frame, columns=cols, show="headings", selectmode="browse")
+        
+        tree.heading("ID", text="ID")
+        tree.column("ID", width=40, anchor="center")
+        tree.heading("Fecha", text="Fecha")
+        tree.column("Fecha", width=150, anchor="center")
+        tree.heading("Título", text="Test / Tema")
+        tree.column("Título", width=300)
+        tree.heading("Nota", text="Nota")
+        tree.column("Nota", width=80, anchor="center")
+        tree.heading("Aciertos/Fallos", text="Aciertos / Fallos")
+        tree.column("Aciertos/Fallos", width=120, anchor="center")
+        
+        scroll = ttk.Scrollbar(tree_frame, orient="vertical", command=tree.yview)
+        tree.configure(yscrollcommand=scroll.set)
+        
+        tree.pack(side="left", fill="both", expand=True)
+        scroll.pack(side="right", fill="y")
+        
+        # Boton Ver Detalle
+        btn_frame = ttk.Frame(self.root, padding="10")
+        btn_frame.pack(fill="x")
+        
+        def ver_detalle_seleccionado():
+            sel = tree.selection()
+            if not sel: return
+            item = tree.item(sel[0])
+            id_intento = item['values'][0]
+            self.cargar_detalle_historial(id_intento)
+
+        ttk.Button(btn_frame, text="Ver Detalle del Intento", style="Action.TButton", command=ver_detalle_seleccionado).pack()
+
+        # Cargar Datos DB
+        try:
+            docs_dir = os.path.join(os.path.expanduser("~"), "Documents", "TestInteractivo")
+            db_path = os.path.join(docs_dir, "historial_test.db")
+            
+            if not os.path.exists(db_path):
+                ttk.Label(tree_frame, text="No hay historial todavía.").pack()
+                return
+
+            conn = sqlite3.connect(db_path)
+            c = conn.cursor()
+            c.execute("SELECT id, fecha, titulo, nota, aciertos, fallos FROM intentos ORDER BY id DESC")
+            rows = c.fetchall()
+            conn.close()
+            
+            for r in rows:
+                # r = (id, fecha, titulo, nota, aciertos, fallos)
+                fecha_fmt = r[1]
+                stats = f"{r[4]} A / {r[5]} F"
+                tree.insert("", "end", values=(r[0], fecha_fmt, r[2], f"{r[3]:.1f}", stats))
+                
+        except Exception as e:
+            messagebox.showerror("Error", f"No se pudo leer historial: {e}")
+
+
+    def cargar_detalle_historial(self, id_intento):
+        try:
+            docs_dir = os.path.join(os.path.expanduser("~"), "Documents", "TestInteractivo")
+            db_path = os.path.join(docs_dir, "historial_test.db")
+            conn = sqlite3.connect(db_path)
+            c = conn.cursor()
+            c.execute("SELECT titulo, detalles FROM intentos WHERE id=?", (id_intento,))
+            row = c.fetchone()
+            conn.close()
+            
+            if not row: return
+            
+            titulo_test = row[0]
+            detalles_str = row[1]
+            data = json.loads(detalles_str)
+            
+            # Reconstruir estado para usar la vista de resultados existente
+            # La vista 'mostrar_correccion' usa self.preguntas_seleccionadas y self.respuestas_usuario
+            
+            # Mapear JSON guardado a estructuras de objetos
+            self.respuestas_usuario = data.get('respuestas') or data.get('respuestas_usuario')
+            if not self.respuestas_usuario:
+                 messagebox.showerror("Error", "Este registro antiguo no tiene respuestas guardadas.")
+                 return
+
+            raw_preguntas = data.get('preguntas_info')
+            
+            if raw_preguntas:
+                # Formato nuevo rico (el que acabamos de crear en guardar_automatico)
+                self.preguntas_seleccionadas = []
+                for p in raw_preguntas:
+                    # Reconstruir dict de pregunta
+                    nueva_p = {
+                        'pregunta': p['pregunta'],
+                        'respuesta': p['respuesta_correcta'],
+                        'archivo_origen': p.get('archivo_origen', '-')
+                    }
+                    # Opciones
+                    ops = p['opciones']
+                    if len(ops) >= 4:
+                        nueva_p['opciona'] = ops[0]
+                        nueva_p['opcionb'] = ops[1]
+                        nueva_p['opcionc'] = ops[2]
+                        nueva_p['opciond'] = ops[3]
+                    self.preguntas_seleccionadas.append(nueva_p)
+            else:
+                # Formato antiguo (solo guardaba IDs o totales, no se puede reconstruir detalle visual completo sin las preguntas originales)
+                # Si el DB guardaba las preguntas en otro lado, las necesitamos. 
+                # El guardar_en_db antiguo guardaba: "total_preguntas" y "respuestas". No guardaba el texto de las preguntas.
+                # CORRECCIÓN: El código anterior NO guardaba el texto de las preguntas en el JSON 'detalles', lo cual hace imposible
+                # ver el detalle histórico si cambian los CSVs o no los cargamos.
+                # He actualizado el guardar_automatico para incluir la info de la pregunta.
+                # Para registros viejos, mostraremos aviso.
+                messagebox.showwarning("Historial Antiguo", "Este registro es de una versión anterior y no contiene el texto de las preguntas para revisar.")
+                return
+
+            self.cantidad = len(self.preguntas_seleccionadas)
+            
+            # Usar la función existente para mostrar resultados
+            # Pequeño hack: Modificar 'do_restart' del botón "Volver" en esa pantalla 
+            # para que vuelva al historial en vez de al inicio, si queremos ser muy pro.
+            # O simplemente dejar que vuelva al inicio.
+            self.mostrar_correccion()
+            
+            # Cambiar título arriba para indicar que es histórico
+            # (mostrar_correccion limpia la ventana, así que lo hacemos después o modificamos funcion)
+            
+        except Exception as e:
+            messagebox.showerror("Error", f"Error cargando detalle: {e}")
 
     def guardar_en_db(self, nota, aciertos, fallos, blancos):
         titulo = simpledialog.askstring("Guardar Resultado", "Título para este intento (ej. 'Repaso Tema 1'):", parent=self.root)
@@ -619,6 +820,14 @@ class TestApp:
             messagebox.showerror("Error", f"Fallo al guardar reporte: {e}")
 
     def do_restart(self):
+         # Limpieza profunda de estado
+         self.preguntas = []
+         self.preguntas_seleccionadas = []
+         self.respuestas_usuario = []
+         self.mapa_respuestas_desordenadas = {} # CRÍTICO: Olvidar el orden aleatorio anterior
+         self.idx_pregunta = 0
+         self.cantidad = 0
+         
          self.limpiar_bindings()
          self.setup_inicio()
          

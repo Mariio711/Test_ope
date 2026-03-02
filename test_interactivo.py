@@ -155,6 +155,14 @@ class TestApp:
         self.canvas_files.pack(side="left", fill="both", expand=True)
         scroll_files.pack(side="right", fill="y")
         
+        # Bind MouseWheel for macOS trackpad
+        def _on_mousewheel(event):
+            self.canvas_files.yview_scroll(int(-1*(event.delta)), "units")
+        
+        # Vincular tanto al canvas como al frame interno para asegurar captura
+        self.canvas_files.bind_all("<MouseWheel>", _on_mousewheel)
+        self.frame_checks.bind("<MouseWheel>", _on_mousewheel)
+        
         # Cargar archivos automáticamente
         self.cargar_archivos_carpeta()
 
@@ -414,6 +422,15 @@ class TestApp:
         opciones_canvas.pack(side="left", fill="both", expand=True)
         opciones_scroll.pack(side="right", fill="y")
 
+        # Bind MouseWheel for Options (macOS trackpad)
+        def _on_opciones_scroll(event):
+            try:
+                opciones_canvas.yview_scroll(int(-1*(event.delta)), "units")
+            except: pass
+            
+        # Atar evento globalmente para esta pantalla
+        opciones_canvas.bind_all("<MouseWheel>", _on_opciones_scroll)
+
         # Configurar Footer (Ya creado al inicio para garantizar visibilidad)
         
         # Grid layout para footer responsive
@@ -662,6 +679,15 @@ class TestApp:
         
         tree.pack(side="left", fill="both", expand=True)
         scroll.pack(side="right", fill="y")
+        
+        # Bind MouseWheel for Treeview (macOS specific override if needed)
+        def _on_tree_scroll(event):
+            try:
+                tree.yview_scroll(int(-1*(event.delta)), "units")
+            except: pass
+            
+        # Bind to treeview explicitly and globally for safety
+        tree.bind_all("<MouseWheel>", _on_tree_scroll)
         
         # Boton Ver Detalle
         btn_frame = ttk.Frame(self.root, padding="10")

@@ -51,8 +51,10 @@ class TestApp:
         self.preguntas = []
         self.preguntas_seleccionadas = []
         self.respuestas_usuario = [] # Ahora guardará el índice original (1,2,3,4)
+        self.mapa_respuestas_desordenadas = {}
         self.idx_pregunta = 0
         self.cantidad = 0
+        self.modo_revision = False # Flag para saber si estamos viendo historial o terminando un test
         self.mezclar = tk.BooleanVar()
         self.vars_archivos = {}
         
@@ -155,13 +157,20 @@ class TestApp:
         self.canvas_files.pack(side="left", fill="both", expand=True)
         scroll_files.pack(side="right", fill="y")
         
-        # Bind MouseWheel for macOS trackpad
-        def _on_mousewheel(event):
-            self.canvas_files.yview_scroll(int(-1*(event.delta)), "units")
+        # Bind MouseWheel for macOS trackpad (Global)
+        def _on_mousewheel_files(event):
+            try:
+                # Comprobar sistema operativo para dirección/velocidad
+                if event.delta:
+                    self.canvas_files.yview_scroll(int(-1*(event.delta)), "units")
+                else: 
+                     # Soporte linux/windows si delta es 0 o uso Button-4/5
+                     pass
+            except: pass
         
-        # Vincular tanto al canvas como al frame interno para asegurar captura
-        self.canvas_files.bind_all("<MouseWheel>", _on_mousewheel)
-        self.frame_checks.bind("<MouseWheel>", _on_mousewheel)
+        # Vincular a ROOT para que funcione en cualquier parte de la ventana
+        self.root.unbind_all("<MouseWheel>") # Limpiar anteriores
+        self.root.bind_all("<MouseWheel>", _on_mousewheel_files)
         
         # Cargar archivos automáticamente
         self.cargar_archivos_carpeta()
@@ -292,8 +301,14 @@ class TestApp:
         pregunta = self.preguntas_seleccionadas[self.idx_pregunta]
         
         # === Header: Barra de progreso y Controles ===
-        header_frame = ttk.Frame(self.root, padding="10")
-        header_frame.pack(side="top", fill="x")
+        # Si NO estamos en modo revisión, mostrar barra de progreso
+        if not self.modo_revision:
+            header_frame = ttk.Frame(self.root, padding="10")
+            header_frame.pack(side="top", fill="x")
+        else:
+            # En modo revisión, solo un título y controles simples
+            header_frame = ttk.Frame(self.root, padding="10")
+            header_frame.pack(side="top", fill="x")
         
         # === Botones de navegación Footer (Pack FIRST to ensure visibility) ===
         nav_frame = ttk.Frame(self.root, padding="15", relief="raised")
@@ -425,11 +440,16 @@ class TestApp:
         # Bind MouseWheel for Options (macOS trackpad)
         def _on_opciones_scroll(event):
             try:
-                opciones_canvas.yview_scroll(int(-1*(event.delta)), "units")
+                 if event.delta:
+                    opciones_canvas.yview_scroll(int(-1*(event.delta)), "units")
             except: pass
             
         # Atar evento globalmente para esta pantalla
-        opciones_canvas.bind_all("<MouseWheel>", _on_opciones_scroll)
+        self.root.unbind_all("<MouseWheel>")
+        self.root.bind_all("<MouseWheel>", _on_opciones_scroll)
+        
+        # También vincular evento localmente al entrar/salir del frame (opcional para mejorar foco)
+        # pero bind_all con root debería bastar si limpiamos bien al salir.
 
         # Configurar Footer (Ya creado al inicio para garantizar visibilidad)
         
@@ -567,11 +587,13 @@ class TestApp:
         # Scroll mouse
         def _on_mousewheel(event):
             try:
-                canvas.yview_scroll(int(-1*(event.delta)), "units")
+                if event.delta:
+                    canvas.yview_scroll(int(-1*(event.delta)), "units")
             except: pass
 
-        # Vincular mousewheel solo cuando estamos en esta pantalla
-        canvas.bind_all("<MouseWheel>", _on_mousewheel)
+        # Vincular mousewheel global
+        self.root.unbind_all("<MouseWheel>")
+        self.root.bind_all("<MouseWheel>", _on_mousewheel)
         self.current_mousewheel_bind = _on_mousewheel 
         
         # Botones de Acción (Guardar / Salir)
@@ -584,8 +606,9 @@ class TestApp:
         # ttk.Button(left_actions, text="💾 Guardar en Historial", command=lambda: self.guardar_en_db(nota, aciertos, fallos, blancos)).pack(side="left", padx=5)
         ttk.Button(left_actions, text="📄 Descargar Reporte", command=lambda: self.descargar_reporte(nota, aciertos, fallos, blancos)).pack(side="left", padx=5)
 
-        # Guardado Automático
-        self.guardar_en_db_automatico(nota, aciertos, fallos, blancos)
+        # Guardado Automático solo si NO es revisión
+        if not self.modo_revision:
+            self.guardar_en_db_automatico(nota, aciertos, fallos, blancos)
 
         # Derecha: Volver
         ttk.Button(action_frame, text="Volver al Menú", command=self.do_restart).pack(side="right", padx=5)
@@ -680,14 +703,16 @@ class TestApp:
         tree.pack(side="left", fill="both", expand=True)
         scroll.pack(side="right", fill="y")
         
-        # Bind MouseWheel for Treeview (macOS specific override if needed)
+        # Bind MouseWheel for Treeview
         def _on_tree_scroll(event):
             try:
-                tree.yview_scroll(int(-1*(event.delta)), "units")
+                if event.delta:
+                     tree.yview_scroll(int(-1*(event.delta)), "units")
             except: pass
             
-        # Bind to treeview explicitly and globally for safety
-        tree.bind_all("<MouseWheel>", _on_tree_scroll)
+        # Bind global to enable scroll anywhere
+        self.root.unbind_all("<MouseWheel>")
+        self.root.bind_all("<MouseWheel>", _on_tree_scroll)
         
         # Boton Ver Detalle
         btn_frame = ttk.Frame(self.root, padding="10")
@@ -784,11 +809,9 @@ class TestApp:
                 return
 
             self.cantidad = len(self.preguntas_seleccionadas)
+            self.modo_revision = True # Activar flag para no volver a guardar
             
             # Usar la función existente para mostrar resultados
-            # Pequeño hack: Modificar 'do_restart' del botón "Volver" en esa pantalla 
-            # para que vuelva al historial en vez de al inicio, si queremos ser muy pro.
-            # O simplemente dejar que vuelva al inicio.
             self.mostrar_correccion()
             
             # Cambiar título arriba para indicar que es histórico
@@ -901,6 +924,7 @@ class TestApp:
          self.mapa_respuestas_desordenadas = {} # CRÍTICO: Olvidar el orden aleatorio anterior
          self.idx_pregunta = 0
          self.cantidad = 0
+         self.modo_revision = False
          
          self.limpiar_bindings()
          self.setup_inicio()

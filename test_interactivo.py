@@ -88,18 +88,47 @@ class TestApp:
         main_frame = ttk.Frame(self.root, padding="20")
         main_frame.pack(fill="both", expand=True)
 
-        # Título
-        ttk.Label(main_frame, text="Bienvenido al Test Interactivo", style="Title.TLabel").pack(pady=(0, 20))
+        # === ZONA INFERIOR (Botones y Config) - Pack primero para asegurar visibilidad ===
+        bottom_area = ttk.Frame(main_frame)
+        bottom_area.pack(side="bottom", fill="x", pady=10)
 
+        # Botón Historial
+        ttk.Button(bottom_area, text="📂 Ver Historial de Intentos", command=self.ver_historial).pack(side="bottom", fill="x", pady=(0, 5))
+
+        # Botón de inicio
+        ttk.Button(bottom_area, text="COMENZAR EXAMEN", style="Action.TButton", command=self.comenzar).pack(side="bottom", fill="x", ipadx=40, ipady=10, pady=10)
+
+        # Opciones (Encima de los botones)
+        opt_frame = ttk.LabelFrame(bottom_area, text="Configuración", padding="10")
+        opt_frame.pack(side="bottom", fill="x", pady=10)
+        
+        ttk.Checkbutton(opt_frame, text="Mezclar orden de preguntas aleatoriamente", variable=self.mezclar).pack(anchor="w")
+        ttk.Checkbutton(opt_frame, text="Desordenar opciones de respuesta (a, b, c, d...)", variable=self.mezclar_respuestas).pack(anchor="w")
+
+
+        # === ZONA SUPERIOR (Título) ===
+        # Título
+        ttk.Label(main_frame, text="Bienvenido al Test Interactivo", style="Title.TLabel").pack(side="top", pady=(0, 10))
+
+
+        # === ZONA CENTRAL (Selección de Archivos - Flexible) ===
         # Sección de selección de archivos
         lbl_frame = ttk.LabelFrame(main_frame, text="Fuente de Preguntas", padding="10")
-        lbl_frame.pack(fill="both", expand=True, pady=10)
+        lbl_frame.pack(side="top", fill="both", expand=True, pady=5)
+        
+        # Botones de control de archivos (Pack BOTTOM dentro del frame para asegurar visibilidad)
+        btn_frame = ttk.Frame(lbl_frame)
+        btn_frame.pack(side="bottom", fill="x", pady=5)
+        
+        ttk.Button(btn_frame, text="Buscar Externos...", command=self.buscar_otros_archivos).pack(side="left", padx=5)
+        ttk.Button(btn_frame, text="Todos", command=self.seleccionar_todos).pack(side="left", padx=5)
+        ttk.Button(btn_frame, text="Ninguno", command=self.deseleccionar_todos).pack(side="left", padx=5)
 
-        ttk.Label(lbl_frame, text="Selecciona los archivos CSV disponibles o busca nuevos:", style="Subtitle.TLabel").pack(anchor="w", pady=(0, 5))
+        ttk.Label(lbl_frame, text="Selecciona archivos CSV disponibles:", style="Subtitle.TLabel").pack(side="top", anchor="w", pady=(0, 5))
 
-        # Frame con Scrollbar para lista de archivos
+        # Frame con Scrollbar para lista de archivos (Pack expandible ocupa el resto)
         list_frame = ttk.Frame(lbl_frame, relief="sunken", borderwidth=1)
-        list_frame.pack(fill="both", expand=True, pady=5)
+        list_frame.pack(side="top", fill="both", expand=True, pady=5)
 
         self.canvas_files = tk.Canvas(list_frame, bg="white", highlightthickness=0)
         scroll_files = ttk.Scrollbar(list_frame, orient="vertical", command=self.canvas_files.yview)
@@ -128,27 +157,6 @@ class TestApp:
         
         # Cargar archivos automáticamente
         self.cargar_archivos_carpeta()
-
-        # Botones de control de archivos
-        btn_frame = ttk.Frame(lbl_frame)
-        btn_frame.pack(fill="x", pady=5)
-        
-        ttk.Button(btn_frame, text="Buscar Externos...", command=self.buscar_otros_archivos).pack(side="left", padx=5)
-        ttk.Button(btn_frame, text="Todos", command=self.seleccionar_todos).pack(side="left", padx=5)
-        ttk.Button(btn_frame, text="Ninguno", command=self.deseleccionar_todos).pack(side="left", padx=5)
-
-        # Opciones
-        opt_frame = ttk.LabelFrame(main_frame, text="Configuración", padding="10")
-        opt_frame.pack(fill="x", pady=10)
-        
-        ttk.Checkbutton(opt_frame, text="Mezclar orden de preguntas aleatoriamente", variable=self.mezclar).pack(anchor="w")
-        ttk.Checkbutton(opt_frame, text="Desordenar opciones de respuesta (a, b, c, d...)", variable=self.mezclar_respuestas).pack(anchor="w")
-
-        # Botón de inicio
-        ttk.Button(main_frame, text="COMENZAR EXAMEN", style="Action.TButton", command=self.comenzar).pack(pady=20, ipadx=40, ipady=10)
-        
-        # Botón Historial
-        ttk.Button(main_frame, text="Ver Historial de Intentos", command=self.ver_historial).pack(pady=5)
 
     def cargar_archivos_carpeta(self):
         # Limpiar anteriores si recarga
@@ -277,7 +285,15 @@ class TestApp:
         
         # === Header: Barra de progreso y Controles ===
         header_frame = ttk.Frame(self.root, padding="10")
-        header_frame.pack(fill="x")
+        header_frame.pack(side="top", fill="x")
+        
+        # === Botones de navegación Footer (Pack FIRST to ensure visibility) ===
+        nav_frame = ttk.Frame(self.root, padding="15", relief="raised")
+        nav_frame.pack(side="bottom", fill="x")
+
+        # === Contenido Pregunta (Pack LAST to fill remaining space) ===
+        content_frame = ttk.Frame(self.root, padding="20")
+        content_frame.pack(side="top", fill="both", expand=True)
         
         top_info = ttk.Frame(header_frame)
         top_info.pack(fill="x")
@@ -320,17 +336,22 @@ class TestApp:
         # Ajuste dinámico del wraplength
         lbl_preg.bind("<Configure>", lambda e: lbl_preg.configure(wraplength=e.width - 20))
 
-        # === Opciones ===
+        # === Opciones (Scrollable) ===
         # Recuperar respuesta guardada si existe
         resp_actual = self.respuestas_usuario[self.idx_pregunta]
         
         self.resp_var = tk.IntVar(value=0) # Valor visual (del 1 al N según orden en pantalla)
         
-        opciones_canvas = tk.Canvas(content_frame, bg=self.bg_color, highlightthickness=0)
-        opciones_scroll = ttk.Scrollbar(content_frame, orient="vertical", command=opciones_canvas.yview)
+        # Frame central expansible con scroll
+        central_frame = ttk.Frame(content_frame)
+        central_frame.pack(fill="both", expand=True)
+
+        opciones_canvas = tk.Canvas(central_frame, bg=self.bg_color, highlightthickness=0)
+        opciones_scroll = ttk.Scrollbar(central_frame, orient="vertical", command=opciones_canvas.yview)
         
         opciones_inner = ttk.Frame(opciones_canvas)
-        opciones_canvas.create_window((0, 0), window=opciones_inner, anchor="nw")
+        # Importante: Window width dinámico
+        window_id = opciones_canvas.create_window((0, 0), window=opciones_inner, anchor="nw")
         
         opciones_opciones = obtener_opciones(pregunta)
         
@@ -358,36 +379,60 @@ class TestApp:
                      self.resp_var.set(idx_vis)
                      break
 
-        # Renderizar opciones
+        # Renderizar opciones con WRAP LENGTH DINÁMICO
+        self.radio_labels = [] # Guardar referencias para actualizarlos
         for idx_visual, (idx_real_original, texto_opcion) in enumerate(items_a_mostrar, 1):
             # idx_visual es el valor que asume el Radiobutton (1, 2, 3...)
-            # idx_real_original es el valor que guardaremos en la logica (A=1, B=2...)
-            rb = ttk.Radiobutton(opciones_inner, text=texto_opcion, variable=self.resp_var, value=idx_visual, style="TRadiobutton")
-            rb.pack(fill="x", pady=8, anchor="w", padx=10)
+            # Usamos un Frame por opción para controlar mejor el layout de texto largo
+            row = ttk.Frame(opciones_inner)
+            row.pack(fill="x", pady=5, padx=5)
+            
+            rb = ttk.Radiobutton(row, variable=self.resp_var, value=idx_visual, style="TRadiobutton")
+            rb.pack(side="left", anchor="n", pady=2)
+            
+            # Label separado para texto con wrap
+            lbl = ttk.Label(row, text=texto_opcion, font=("Helvetica", self.font_size))
+            lbl.pack(side="left", fill="x", expand=True, padx=5)
+            # Hacer clic en el texto también selecciona
+            lbl.bind("<Button-1>", lambda e, v=idx_visual: self.resp_var.set(v))
+            
+            self.radio_labels.append(lbl)
+
+        # Ajuste de scroll y wrap automático
+        def on_canvas_configure(event):
+            canvas_width = event.width
+            opciones_canvas.itemconfig(window_id, width=canvas_width)
+            # Actualizar wraplength de todas las opciones
+            wrap_limit = max(200, canvas_width - 60) # Margen para el radio y scroll
+            for lbl in self.radio_labels:
+                lbl.configure(wraplength=wrap_limit)
         
         opciones_inner.bind("<Configure>", lambda e: opciones_canvas.configure(scrollregion=opciones_canvas.bbox("all")))
+        opciones_canvas.bind("<Configure>", on_canvas_configure)
         opciones_canvas.configure(yscrollcommand=opciones_scroll.set)
         
         opciones_canvas.pack(side="left", fill="both", expand=True)
         opciones_scroll.pack(side="right", fill="y")
 
-        # === Botones de navegación Footer ===
-        nav_frame = ttk.Frame(self.root, padding="20")
-        nav_frame.pack(fill="x", side="bottom")
+        # Configurar Footer (Ya creado al inicio para garantizar visibilidad)
         
-        # Botón Anterior
+        # Grid layout para footer responsive
+        nav_frame.columnconfigure(0, weight=1) # Espacio flexible
+        nav_frame.columnconfigure(1, weight=0) # Botones centro/der
+        
+        # Botones Izquierda (Anterior)
         if self.idx_pregunta > 0:
-            ttk.Button(nav_frame, text="<< Anterior", command=self.pregunta_anterior).pack(side="left")
+            ttk.Button(nav_frame, text="<< Anterior", command=self.pregunta_anterior).grid(row=0, column=0, sticky="w")
 
+        # Contenedor derecha (Blanco + Siguiente)
+        right_group = ttk.Frame(nav_frame)
+        right_group.grid(row=0, column=1, sticky="e")
+        
+        ttk.Button(right_group, text="Dejar en blanco", command=lambda: self.guardar_respuesta_actual(None)).pack(side="left", padx=5)
+        
         # Botón Siguiente / Finalizar
         txt_siguiente = "Siguiente >>" if self.idx_pregunta < self.cantidad - 1 else "Finalizar Examen"
-        
-        # Contenedor derecha para saltar y siguiente
-        right_nav = ttk.Frame(nav_frame)
-        right_nav.pack(side="right")
-        
-        ttk.Button(right_nav, text="Dejar en blanco", command=lambda: self.guardar_respuesta_actual(None)).pack(side="left", padx=5)
-        ttk.Button(right_nav, text=txt_siguiente, style="Action.TButton", command=self.siguiente_pregunta_accion).pack(side="left")
+        ttk.Button(right_group, text=txt_siguiente, style="Action.TButton", command=self.siguiente_pregunta_accion).pack(side="left")
 
     def siguiente_pregunta_accion(self):
         val_visual = self.resp_var.get()
@@ -516,6 +561,9 @@ class TestApp:
         action_frame = ttk.Frame(self.root, padding="10")
         action_frame.pack(fill="x", side="bottom")
         
+        left_actions = ttk.Frame(action_frame)
+        left_actions.pack(side="left")
+
         # ttk.Button(left_actions, text="💾 Guardar en Historial", command=lambda: self.guardar_en_db(nota, aciertos, fallos, blancos)).pack(side="left", padx=5)
         ttk.Button(left_actions, text="📄 Descargar Reporte", command=lambda: self.descargar_reporte(nota, aciertos, fallos, blancos)).pack(side="left", padx=5)
 
